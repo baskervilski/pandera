@@ -84,6 +84,26 @@ def test_dataframe_schema_strict():
         schema.validate(df)
 
 
+def test_dataframe_schema_strict_filter():
+    """
+    Checks if strict='filter' returns only specified columns
+    """
+    schema = DataFrameSchema(
+        {"a": Column(Int, nullable=True)},
+        strict='filter'
+    )
+    
+    df = pd.DataFrame({
+        "a": [4, 5, 6],
+        "b": [1, 2, 3]
+    })
+    
+    df_val = schema.validate(df)
+    
+    assert "a" in df_val.columns
+    assert "b" not in df_val.columns
+
+
 def test_dataframe_schema_strict_regex():
     """Test that strict dataframe schema checks for regex matches."""
     schema = DataFrameSchema(

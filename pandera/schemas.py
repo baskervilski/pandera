@@ -61,7 +61,7 @@ class DataFrameSchema():
             index=None,
             transformer: Callable = None,
             coerce: bool = False,
-            strict=False,
+            strict: Union[bool, str] = False,
             name: str = None) -> None:
         """Initialize DataFrameSchema validator.
 
@@ -78,7 +78,8 @@ class DataFrameSchema():
         :param coerce: whether or not to coerce all of the columns on
             validation.
         :param strict: whether or not to accept columns in the dataframe that
-            aren't in the DataFrameSchema.
+            aren't in the DataFrameSchema. Also accepts special string 'filter'
+            which results in returning a DataFrame with only the specified columns
         :param name: name of the schema.
 
         :raises SchemaInitError: if impossible to build schema from parameters
@@ -133,6 +134,9 @@ class DataFrameSchema():
                     "Must specify dtype in all Columns if coercing "
                     "DataFrameSchema ; columns with missing pandas_type:" +
                     ", ".join(missing_pandas_type))
+
+        if strict not in [True, False, 'filter']:
+            raise ValueError(f'Allowed values for the parameter strict are: True, False and `filter`; {strict} given')
 
         self.checks = checks
         self.index = index
@@ -323,7 +327,7 @@ class DataFrameSchema():
 
         # dataframe strictness check makes sure all columns in the dataframe
         # are specified in the dataframe schema
-        if self.strict:
+        if self.strict == True:
 
             # expand regex columns
             col_regex_matches = []  # type: ignore
