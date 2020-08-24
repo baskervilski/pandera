@@ -11,7 +11,7 @@ import pandas as pd
 
 from . import errors, constants, dtypes
 from .checks import Check
-from .dtypes import PandasDtype
+from .dtypes import PandasDtype, PandasExtensionType
 from .error_formatters import (
     format_generic_error_message, format_vectorized_error_message,
     reshape_failure_cases, scalar_failure_case,
@@ -28,6 +28,8 @@ CheckList = Optional[
         List[Union[Check, Hypothesis]]
     ]
 ]
+
+PandasDtypeInputTypes = Union[str, type, PandasDtype, PandasExtensionType]
 
 
 def _inferred_schema_guard(method):
@@ -592,14 +594,14 @@ class DataFrameSchema():
         """
         import pandera.io  # pylint: disable-all
         return pandera.io.to_yaml(self, fp)
-    
+
     def rename_columns(self, rename_dict: dict):
         """Rename columns using a dictionary of key value pairs 
-        
+
         :param rename_dict: Dictionary of 'old_name':'new_name' key-value pairs.
         :returns: dataframe schema (copy of original)
         """
-        
+
         # We iterate over the existing columns dict and replace those keys
         # that exist in the rename_dict
         new_schema = copy.deepcopy(self)
@@ -607,11 +609,10 @@ class DataFrameSchema():
             (rename_dict[col_name] if col_name in rename_dict else col_name): col_attrs
             for col_name, col_attrs in self.columns.items()
         }
-        
+
         new_schema.columns = new_columns
- 
+
         return new_schema
-        
 
 
 class SeriesSchemaBase():
@@ -619,9 +620,7 @@ class SeriesSchemaBase():
 
     def __init__(
             self,
-            pandas_dtype: Union[
-                str, dtypes.PandasDtype, dtypes.PandasExtensionType
-            ] = None,
+            pandas_dtype: PandasDtypeInputTypes = None,
             checks: CheckList = None,
             nullable: bool = False,
             allow_duplicates: bool = True,
@@ -660,6 +659,12 @@ class SeriesSchemaBase():
             if check.groupby is not None and not self._allow_groupby:
                 raise errors.SchemaInitError(
                     "Cannot use groupby checks with type %s" % type(self))
+
+        # make sure pandas dtype is valid
+        try:
+            self.dtype
+        except TypeError:
+            raise
 
         # this attribute is not meant to be accessed by users and is explicitly
         # set to True in the case that a schema is created by infer_schema.
@@ -719,6 +724,26 @@ class SeriesSchemaBase():
         return self._name
 
     @property
+    def pandas_dtype(self) -> Union[
+            str,
+            dtypes.PandasDtype,
+            dtypes.PandasExtensionType]:
+        """Get the pandas dtype"""
+        return self._pandas_dtype
+
+    @pandas_dtype.setter
+    def pandas_dtype(self, value: Union[
+            str,
+            dtypes.PandasDtype,
+            dtypes.PandasExtensionType]) -> None:
+        """Set the pandas dtype"""
+        self._pandas_dtype = value
+        try:
+            self.dtype
+        except TypeError:
+            raise
+
+    @property
     def dtype(self) -> Union[str, None]:
         """String representation of the dtype."""
         try:
@@ -735,12 +760,16 @@ class SeriesSchemaBase():
         elif isinstance(self._pandas_dtype, str):
             dtype = PandasDtype.from_str_alias(  # type: ignore
                 self._pandas_dtype).str_alias
+        elif isinstance(self._pandas_dtype, type):
+            dtype = PandasDtype.from_python_type(self._pandas_dtype).str_alias
         elif isinstance(self._pandas_dtype, dtypes.PandasDtype):
             dtype = self._pandas_dtype.str_alias
         else:
             raise TypeError(
-                "type of `pandas_dtype` argument not recognized: %s" %
-                type(self._pandas_dtype)
+                "type of `pandas_dtype` argument not recognized: %s "
+                "Please specify a pandera PandasDtype enum, legal pandas data "
+                "type, pandas data type string alias, or numpy data type "
+                "string alias" % type(self._pandas_dtype)
             )
         return dtype
 
@@ -828,8 +857,6 @@ class SeriesSchemaBase():
 
         series_dtype = series.dtype
         if self._nullable:
-            # currently, to handle null cases drop null values before passing
-            # into checks.
             series_no_nans = series.dropna()
             if self.dtype in dtypes.NUMPY_NONNULLABLE_INT_DTYPES:
                 _series = series_no_nans.astype(self.dtype)
