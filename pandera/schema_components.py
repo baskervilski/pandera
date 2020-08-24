@@ -7,9 +7,11 @@ from typing import Union, Optional, Tuple, Any, List, Dict
 import numpy as np
 import pandas as pd
 
-from . import errors, dtypes
+from . import errors
 from .dtypes import PandasDtype
-from .schemas import DataFrameSchema, SeriesSchemaBase, CheckList
+from .schemas import (
+    DataFrameSchema, SeriesSchemaBase, CheckList, PandasDtypeInputTypes
+)
 
 
 def _is_valid_multiindex_tuple_str(x: Tuple[Any]) -> bool:
@@ -22,8 +24,7 @@ class Column(SeriesSchemaBase):
 
     def __init__(
             self,
-            pandas_dtype: Union[
-                str, PandasDtype, dtypes.PandasExtensionType] = None,
+            pandas_dtype: PandasDtypeInputTypes = None,
             checks: CheckList = None,
             nullable: bool = False,
             allow_duplicates: bool = True,
@@ -76,11 +77,10 @@ class Column(SeriesSchemaBase):
             raise ValueError(
                 "You cannot specify a non-string name when setting regex=True")
         self.required = required
-        self.pandas_dtype = pandas_dtype
         self._name = name
         self._regex = regex
 
-        if coerce and pandas_dtype is None:
+        if coerce and self._pandas_dtype is None:
             raise errors.SchemaInitError(
                 "Must specify dtype if coercing a Column's type")
 
@@ -98,7 +98,7 @@ class Column(SeriesSchemaBase):
     def properties(self) -> Dict[str, Any]:
         """Get column properties."""
         return {
-            "pandas_dtype": self.pandas_dtype,
+            "pandas_dtype": self._pandas_dtype,
             "checks": self._checks,
             "nullable": self._nullable,
             "allow_duplicates": self._allow_duplicates,
@@ -242,13 +242,13 @@ class Index(SeriesSchemaBase):
 
     def __init__(
             self,
-            pandas_dtype: Union[
-                str, PandasDtype, dtypes.PandasExtensionType] = None,
+            pandas_dtype: PandasDtypeInputTypes = None,
             checks: CheckList = None,
             nullable: bool = False,
             allow_duplicates: bool = True,
             coerce: bool = False,
             name: str = None) -> None:
+        # pylint: disable=useless-super-delegation
         """Create Index validator.
 
         :param pandas_dtype: datatype of the column. A ``PandasDtype`` for
